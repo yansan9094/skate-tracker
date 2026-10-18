@@ -25,21 +25,18 @@ Eine kleine Web-App im iOS-Look, die sich wie eine native App anfühlt
   als JSON-Backup unter Personen → Daten.
 
 ## Auf dem iPhone installieren
-Voraussetzung: die Dateien sind über eine HTTPS-Adresse erreichbar, z.B.
-GitHub Pages (empfohlen, kostenlos) oder jeder eigene Webserver mit HTTPS.
+1. In **Safari** (nicht Chrome!) öffnen: **https://yansan9094.github.io/skate-tracker/**
+2. Teilen-Button (Unten in der Leiste) → **„Zum Startbildschirm hinzufügen“**.
+3. Fertig: App-Icon ⛸️ startet vollbildschirmartig ohne Safari-Leiste.
 
-1. `index.html`, `manifest.json`, `sw.js`, `icon-*.png`, `apple-touch-icon.png`
-   auf den Host kopieren (z.B. GitHub-Repo → Settings → Pages).
-2. In **Safari** die URL öffnen.
-3. Teilen-Button → **„Zum Startbildschirm hinzufügen“**.
-4. Fertig: App-Icon ⛸️, startet vollbildschirmartig ohne Safari-Leiste.
+## Aktualisieren
+Code hier ändern und pushen (`git push`), dann lädt die App nach wenigen
+Minuten automatisch die neue Version. Trainingsdaten bleiben auf dem Handy
+unverändert erhalten (sie liegen lokal im Safari, nicht auf GitHub).
 
-Schnell-Test im Heimnetz (ohne HTTPS, funktioniert, aber der Offline-Cache ist
-dann deaktiviert und Safari kann LocalStorage bei Http-Adressen gelegentlich
-zurücksetzen – für den Dauerbetrieb also HTTPS nutzen):
-
-    cd skate-tracker && python3 -m http.server 8000
-    # iPhone (gleiches WLAN): http://IP-DIESERS-MASCHINE:8000
+Hinweis: Die Voreinstellungen heißen bewusst „Kind 1–14“ und „Trainer 1–4“,
+da dieses Repo öffentlich ist. Echte Namen einmalig auf dem Handy unter
+„Personen“ eintragen – sie verlassen das Gerät nie.
 
 ## Backup
 Personen → „Export (JSON)“ regelmäßig ziehen (schickt die Datei per Teilen-
