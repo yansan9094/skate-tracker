@@ -83,6 +83,9 @@ input[type=date]{background:var(--card);border:1px solid var(--card-b);border-ra
 input[type=number]{background:rgba(255,255,255,.07);border:1px solid var(--card-b);border-radius:13px;
   padding:11px 12px;width:110px;text-align:center;font-size:18px;font-weight:700;color-scheme:dark}
 .unit{color:var(--tx2);font-weight:600;font-size:13px}
+.ratefold{display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;
+  padding:13px 14px;border-radius:13px;background:rgba(139,92,246,.10);border:1px solid rgba(139,92,246,.30);
+  font-weight:700;font-size:15px;text-align:left}
 input[type=text]{background:rgba(255,255,255,.07);border:1px solid var(--card-b);border-radius:13px;padding:11px 12px;width:100%}
 
 /* tiles */
@@ -260,11 +263,11 @@ async function promptBox(title,val){const v=await askModal(title,"<input type='t
 function groupSizeOf(s){return Math.max(1,s.groupSize||(s.childIds||[]).length||1);}
 function costPerChild(s){return s.rate/60*s.minutes/groupSizeOf(s);}
 function sessionTotal(s){return s.rate/60*s.minutes;}
-/* Stundensatz: der zuletzt vor diesem Tag verwendete Satz des Trainers (Übernahme vom Vortag),
-   sonst Grundrate des Trainers, sonst 60 */
+/* Stundensatz: der zuletzt verwendete Satz des Trainers (am selben Tag oder
+   davor – Übernahme vom Vortag), sonst Grundrate des Trainers, sonst 60 */
 function suggestedRate(coachId,dateISO){
-  const past=state.sessions.filter(s=>s.coachId===coachId&&s.date<dateISO)
-    .sort((a,b)=>a.date<b.date?1:(a.date>b.date?-1:(b.createdAt||0)-(a.createdAt||0)));
+  const past=state.sessions.filter(s=>s.coachId===coachId&&s.date<=dateISO)
+    .sort((a,b)=>a.date<b.date?-1:(a.date>b.date?1:(a.createdAt||0)-(b.createdAt||0))).reverse();
   if(past.length)return past[0].rate;
   const c=state.coaches.find(x=>x.id===coachId);
   return (c&&c.rate)||DEFAULT_RATE;
@@ -299,7 +302,8 @@ function render(){
 /* ================= Tag-Ansicht ================= */
 function renderDay(){
   const sessions=state.sessions.filter(s=>s.date===viewDate).sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
-  const tot=sessions.reduce((a,s)=>a+sessionTotal(s),0);
+  const fixed=firstChild();
+  const totFixed=sessions.filter(s=>(s.childIds||[]).includes(fixed.id)).reduce((a,s)=>a+costPerChild(s),0);
   const totMin=sessions.reduce((a,s)=>a+s.minutes,0);
   const d=dayFmt.format(fromISO(viewDate));
   let html='<div class="top"><h1><span class="badge-app">⛸️</span>Skate Tracker</h1><div class="sub">'+esc(d)+"</div></div>";
@@ -311,7 +315,7 @@ function renderDay(){
   html+='<div class="tiles">'+
     '<div class="tile"><div class="v num">'+sessions.length+'</div><div class="k">Einheiten</div></div>'+
     '<div class="tile"><div class="v num">'+fmtMin(totMin)+'</div><div class="k">Trainingszeit</div></div>'+
-    '<div class="tile hl"><div class="v num">'+fmtEUR(tot)+'</div><div class="k">Gesamtkosten Tag</div></div>'+
+    '<div class="tile hl"><div class="v num">'+fmtEUR(totFixed)+'</div><div class="k">Gesamtkosten '+esc(fixed.name)+"</div></div>"+
     '<div class="tile"><div class="v num">'+sessions.filter(s=>s.type==="ice").length+" / "+sessions.filter(s=>s.type==="office").length+'</div><div class="k">Eis / Off-Ice</div></div></div>';
   if(!sessions.length)html+='<div class="empty">Noch keine Einheit an diesem Tag.<br>Tippe unten auf „Einheit hinzufügen“.</div>';
   for(const s of sessions)html+=sessionCard(s);
@@ -349,7 +353,7 @@ function openSheet(sess){
   const fixedC=firstChild();
   if(sess){fs={...sess,childIds:[...(sess.childIds||[])]};if(fixedC&&!fs.childIds.includes(fixedC.id))fs.childIds.unshift(fixedC.id);}
   else fs={id:null,date:viewDate,type:"ice",coachId:state.coaches[0]?.id||null,minutes:60,
-           rate:suggestedRate(state.coaches[0]?.id,viewDate),childIds:fixedC?[fixedC.id]:[],rateTouched:false,createdAt:null};
+           rate:suggestedRate(state.coaches[0]?.id,viewDate),childIds:fixedC?[fixedC.id]:[],rateTouched:false,rateOpen:false,createdAt:null};
   renderSheet();
 }
 function closeSheet(){$("#sheet").classList.remove("open");$("#backdrop").classList.remove("open");fs=null;}
@@ -369,11 +373,18 @@ function renderSheet(){
   h+='<div class="field"><label id="minLabel">'+fs.minutes+" Minuten</label><div class=\"stepper\">"+
     '<button onclick="bumpMinutes(-5)">−5</button><button onclick="bumpMinutes(-15)">−15</button>'+
     '<input type="number" id="minInput" min="5" max="600" step="5" value="'+fs.minutes+'" oninput="setMinutes(this.value)">'+
-    '<button onclick="bumpMinutes(15)">+15</button><button onclick="bumpMinutes(5)">+5</button></div>'+
-    '<div class="chiprow" style="margin-top:10px">'+[30,45,60,75,90,120].map(m=>'<button class="chip '+(fs.minutes===m?"on":"")+'" onclick="setMinutes('+m+')">'+m+" min</button>").join("")+"</div></div>";
-  h+='<div class="field"><label id="rateLabel">Stundensatz ('+fs.rate+' €/h)</label><div class="stepper">'+
-    '<button onclick="bumpRate(-5)">−5</button><input type="number" id="rateInput" min="0" step="5" value="'+fs.rate+'" oninput="setRate(this.value)">'+
-    '<button onclick="bumpRate(5)">+5</button><span class="unit" id="rateHint">'+(fs.rateTouched||fs.id?"":"← vom Vortag übernommen")+"</span></div></div>";
+    '<button onclick="bumpMinutes(15)">+15</button><button onclick="bumpMinutes(5)">+5</button></div></div>';
+  if(fs.rateOpen){
+    h+='<div class="field"><label id="rateLabel">Stundensatz ('+fs.rate+' €/h)</label><div class="stepper">'+
+      '<button onclick="bumpRate(-5)">−5</button><input type="number" id="rateInput" min="0" step="5" value="'+fs.rate+'" oninput="setRate(this.value)">'+
+      '<button onclick="bumpRate(5)">+5</button><button class="ghostbtn" onclick="fs.rateOpen=false;renderSheet()">✓ Fertig</button></div></div>';
+  }else{
+    h+='<div class="field"><label>Stundensatz</label>'+
+      '<button class="ratefold" onclick="fs.rateOpen=true;renderSheet()"><span>'+fs.rate+' €/h'+
+      (fs.rateTouched||fs.id?'':' <span style="font-weight:500;color:var(--tx2);font-size:13px">← automatisch übernommen</span>')+
+      '</span><span style="color:var(--tx2);font-size:13px">ändern ▾</span></button>'+
+      '<div class="hint">Nur für diese Einheit änderbar – der übernommene Satz bleibt unverändert.</div></div>';
+  }
   h+='<div class="field"><label>Trainingsgruppe ('+fs.childIds.length+" Kind"+(fs.childIds.length!==1?"er":"")+')</label><div class="chiprow">';
   for(const c of state.children){
     const on=fs.childIds.includes(c.id), locked=c.id===(fixedC&&fixedC.id);
@@ -566,7 +577,7 @@ function importData(input){
 
 /* ================= Init ================= */
 if(("serviceWorker" in navigator)&&(location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1")){
-  navigator.serviceWorker.register("sw.js").catch(()=>{});
+  navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).catch(()=>{});
 }
 switchTab("day");
 window.render=render;window.switchTab=switchTab;window.openSheet=openSheet;window.saveSheet=saveSheet;
