@@ -508,7 +508,8 @@ function renderPeople(){
   for(const c of state.children){
     h+='<div class="prow"><span class="avbtn" onclick="pickPhoto(&quot;child&quot;,&quot;'+c.id+'&quot;)">'+avatar(c)+'</span>'+
       '<div style="flex:1;min-width:0"><div class="pname">'+esc(c.name)+(c.fixed?' <span class="small" style="color:var(--cyan)">● immer dabei</span>':"")+'</div></div>'+
-      (c.fixed?'':'<div class="acts"><button onclick="renameChild(&quot;'+c.id+'&quot;)">✏️</button><button onclick="deleteChild(&quot;'+c.id+'&quot;)">🗑</button></div>')+"</div>";
+      '<div class="acts"><button onclick="renameChild(&quot;'+c.id+'&quot;)">✏️</button>'+
+      (c.fixed?'':'<button onclick="deleteChild(&quot;'+c.id+'&quot;)">🗑</button>')+"</div></div>";
   }
   h+='<div class="addrow"><input type="text" id="newChild" placeholder="Neues Kind (hinten anhängen)…"><button class="ghostbtn" onclick="addChild()">＋</button></div></div>';
   h+='<div class="card"><h2>Daten</h2><div class="row">'+
