@@ -4,13 +4,17 @@ Eine kleine Web-App im iOS-Look, die sich wie eine native App anfühlt
 („Zum Startbildschirm hinzufügen“ → Vollbild-App, eigenes Icon, offline nutzbar).
 
 ## Funktionen
-- **Tag**: Einheiten pro Tag anlegen: ❄️ Eistraining oder 🏋️ Off-Ice, Trainer
-  (frei benennbar), Dauer in Minuten (frei, in 5-Min-Schritten per Tippfelder),
+- **Tag**: Einheiten pro Tag anlegen: ❄️ Eistraining, 🏋️ Off-Ice oder 🧩 Patch,
+  Trainer (frei benennbar), Dauer in Minuten (frei, in 5-Min-Schritten per Tippfelder),
   Gruppengröße und -namen, Stundensatz mit Live-Vorschau. Kachel „Gesamtkosten
   <fixes Kind>“ zeigt die Tageskosten Ihres Kindes.
 - **Stundensatz**: standardmäßig zugeklappt; der am Vortag zuletzt verwendete
   Satz des Trainers wird automatisch übernommen (Default 60 €/h). Tippen auf das
   Satz-Feld klappt die Änderung auf – nur für diese Einheit.
+- **Patch-Tickets** (nur bei Typ „Patch“, beide Standard 15 €, einklappbar):
+  „Ticketkosten Trainer“ einmalig pro Einheit, anteilig auf alle Kinder der
+  Gruppe verteilt; „Ticketkosten Kind“ pro Kind. Formel pro Kind:
+  `(Stundensatz/60 · Minuten + Ticket Trainer) ÷ Gruppengröße + Ticket Kind`.
 - **Trainingsgruppe**: Kinder in fester Reihenfolge; das erste Kind (z.B. Ihre
   Tochter) ist immer automatisch dabei und nicht abwählbar. Ohne Auswahl
   weiterer Kinder trägt es die vollen Kosten – funktioniert also ganz ohne
