@@ -201,7 +201,7 @@ input[type=text]{background:rgba(255,255,255,.07);border:1px solid var(--card-b)
 <script>
 "use strict";
 /* ================= Daten / Speicher ================= */
-const KEY="skateT…1", DEFAULT_RATE=60, DEFAULT_TICKET=15;
+const KEY="skateT…1", DEFAULT_RATE=60, DEFAULT_TICKET_TRAINER=15, DEFAULT_TICKET_KIND=0;
 function uid(){return Math.random().toString(36).slice(2,10)+Date.now().toString(36);}
 function seedData(){
   // Namen sind bewusst neutral gehalten – echte Namen einfach in der App unter
@@ -359,8 +359,8 @@ function openSheet(sess){
   if(sess){fs={...sess,childIds:[...(sess.childIds||[])]};if(fixedC&&!fs.childIds.includes(fixedC.id))fs.childIds.unshift(fixedC.id);}
   else fs={id:null,date:viewDate,type:"ice",coachId:state.coaches[0]?.id||null,minutes:60,
            rate:suggestedRate(state.coaches[0]?.id,viewDate),childIds:fixedC?[fixedC.id]:[],rateTouched:false,rateOpen:false,createdAt:null};
-  if(fs.ticketTrainer==null)fs.ticketTrainer=DEFAULT_TICKET;
-  if(fs.ticketKind==null)fs.ticketKind=DEFAULT_TICKET;
+  if(fs.ticketTrainer==null)fs.ticketTrainer=DEFAULT_TICKET_TRAINER;
+  if(fs.ticketKind==null)fs.ticketKind=DEFAULT_TICKET_KIND;
   fs.ttOpen=false;fs.tkOpen=false;
   renderSheet();
 }
@@ -474,10 +474,11 @@ function saveSheet(){
   };
   if(fs.id){const i=state.sessions.findIndex(s=>s.id===fs.id);if(i>=0)state.sessions[i]=rec;}
   else state.sessions.push(rec);
+  const wasEdit=!!fs.id;
   persist();closeSheet();
   if(tab!=="day")switchTab("day");
   viewDate=rec.date;render();
-  toast(fs.id?"Einheit aktualisiert":"Einheit gespeichert ✓");
+  toast(wasEdit?"Einheit aktualisiert":"Einheit gespeichert ✓");
 }
 
 /* ================= Kosten-Übersicht ================= */

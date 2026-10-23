@@ -11,9 +11,9 @@ Eine kleine Web-App im iOS-Look, die sich wie eine native App anfühlt
 - **Stundensatz**: standardmäßig zugeklappt; der am Vortag zuletzt verwendete
   Satz des Trainers wird automatisch übernommen (Default 60 €/h). Tippen auf das
   Satz-Feld klappt die Änderung auf – nur für diese Einheit.
-- **Patch-Tickets** (nur bei Typ „Patch“, beide Standard 15 €, einklappbar):
-  „Ticketkosten Trainer“ einmalig pro Einheit, anteilig auf alle Kinder der
-  Gruppe verteilt; „Ticketkosten Kind“ pro Kind. Formel pro Kind:
+- **Patch-Tickets** (nur bei Typ „Patch“, einklappbar): „Ticketkosten Trainer“
+  (Standard 15 €) einmalig pro Einheit, anteilig auf alle Kinder der Gruppe
+  verteilt; „Ticketkosten Kind“ (Standard 0 €) pro Kind. Formel pro Kind:
   `(Stundensatz/60 · Minuten + Ticket Trainer) ÷ Gruppengröße + Ticket Kind`.
 - **Trainingsgruppe**: Kinder in fester Reihenfolge; das erste Kind (z.B. Ihre
   Tochter) ist immer automatisch dabei und nicht abwählbar. Ohne Auswahl
