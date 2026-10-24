@@ -30,6 +30,28 @@ Eine kleine Web-App im iOS-Look, die sich wie eine native App anfühlt
 - **Daten**: alles lokal im Safari des iPhones (localStorage), Export/Import
   als JSON-Backup unter Personen → Daten.
 
+## Cloud-Sync (optional, für zwei Handys)
+Unter **Personen → Daten → „☁️ Cloud-Sync einrichten"** verbinden sich mehrere
+Geräte mit demselben Datenbestand (Supabase, EU-Region, Gratis-Konto). Einmal
+angelegt, sehen alle Geräte dieselben Einheiten, und Änderungen erscheinen nach
+Sekunden auch auf dem anderen Handy (offline gemachte Änderungen werden
+nachgeliefert, Konfliktregel: pro Datensatz gewinnt die letzte Änderung).
+
+**Einrichtung (einmalig, ~10 Minuten):**
+1. Konto auf https://supabase.com anlegen, Projekt in Region **Frankfurt (eu-central-1)** erstellen.
+2. Im Dashboard unter **SQL Editor** den Inhalt von `supabase-setup.sql` ausführen.
+3. Unter **Authentication → Users → Add user** ein gemeinsames Familienkonto
+   anlegen (E-Mail + Passwort, „Mark email as confirmed“ anhaken).
+4. Unter **Project Settings → API** die Projekt-URL und den anon-Schlüssel
+   ablesen.
+5. Auf **jedem** Handy in der App unter Personen → Daten → Cloud-Sync
+   einrichten: URL, anon-Schlüssel, dieselbe E-Mail + Passwort eintragen →
+   Verbinden. Bestehende Daten beider Geräte werden dabei zusammengeführt.
+
+Hinweise: Der anon-Schlüssel ist öffentlich gedacht; geschützt ist alles durch
+das Familienkonto (RLS). Die Sync-Zugangsdaten liegen im localStorage des
+Geräts. Fotos wandern als Teil der Datensätze mit durch die Cloud.
+
 ## Auf dem iPhone installieren
 1. In **Safari** (nicht Chrome!) öffnen: **https://yansan9094.github.io/skate-tracker/**
 2. Teilen-Button (Unten in der Leiste) → **„Zum Startbildschirm hinzufügen“**.
@@ -42,7 +64,8 @@ unverändert erhalten (sie liegen lokal im Safari, nicht auf GitHub).
 
 Hinweis: Die Voreinstellungen heißen bewusst „Kind 1–14“ und „Trainer 1–4“,
 da dieses Repo öffentlich ist. Echte Namen einmalig auf dem Handy unter
-„Personen“ eintragen – sie verlassen das Gerät nie.
+„Personen“ eintragen – ohne Cloud-Sync verlassen sie das Gerät nie; mit
+aktiviertem Sync liegen sie im Supabase-Projekt der Familie.
 
 ## Backup
 Personen → „Export (JSON)“ regelmäßig ziehen (schickt die Datei per Teilen-

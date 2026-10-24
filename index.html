@@ -198,6 +198,7 @@ input[type=text]{background:rgba(255,255,255,.07);border:1px solid var(--card-b)
 <div id="toast"></div>
 <input type="file" id="photoInput" accept="image/*" hidden>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 "use strict";
 /* ================= Daten / Speicher ================= */
@@ -222,7 +223,182 @@ try{
 function persist(){
   try{localStorage.setItem(KEY,JSON.stringify(state));}
   catch(e){toast("\u26A0\uFE0F Speichern fehlgeschlagen (Speicher voll?)");}
+  syncMarkDirty();
 }
+
+/* ================= Sync (Supabase) ================= */
+/* Pro-Datensatz-Sync: Trainer/Kind/Einheit je als Record, letzter Schreib gewinnt pro Record.
+   Ohne Konfiguration/Schlüssel bleibt die App reine Offline-App wie bisher. */
+const SPACE="family", SYNC_CFG="skateTracker.sync.v1", SYNC_Q="skateTracker.syncq.v1", SYNC_SEEN="skateTracker.syncseen.v1";
+let syncCfg=null;try{syncCfg=JSON.parse(localStorage.getItem(SYNC_CFG))||null;}catch(e){}
+let syncClient=null,syncOn=false,syncFlushing=false,syncBase={},ss=null,syncErr="";
+function syncQGet(){try{return JSON.parse(localStorage.getItem(SYNC_Q))||{};}catch(e){return{};}}
+function syncQSet(q){try{localStorage.setItem(SYNC_Q,JSON.stringify(q));}catch(e){}}
+function recIndex(){
+  const m={};
+  state.coaches.forEach((c,i)=>{m["coach:"+c.id]={kind:"coach",id:c.id,ord:i,data:c};});
+  state.children.forEach((c,i)=>{m["child:"+c.id]={kind:"child",id:c.id,ord:i,data:c};});
+  state.sessions.forEach((s,i)=>{m["session:"+s.id]={kind:"session",id:s.id,ord:i,data:s};});
+  return m;
+}
+function syncRebase(){syncBase={};const idx=recIndex();for(const k in idx)syncBase[k]=JSON.stringify(idx[k].data);}
+function syncMarkDirty(){
+  if(!syncCfg)return;
+  try{
+    const q=syncQGet(),idx=recIndex(),now=Date.now();let changed=false;
+    for(const k in idx){
+      const s=JSON.stringify(idx[k].data);
+      if(syncBase[k]!==s){q[k]={kind:idx[k].kind,id:idx[k].id,ord:idx[k].ord,data:idx[k].data,del:false,ts:now};syncBase[k]=s;changed=true;}
+    }
+    for(const k in syncBase){
+      if(!(k in idx)){const parts=k.split(":");q[k]={kind:parts[0],id:parts.slice(1).join(":"),ord:0,data:null,del:true,ts:now};delete syncBase[k];changed=true;}
+    }
+    if(changed){syncQSet(q);syncFlush();}
+  }catch(e){/* Sync darf Offline-Nutzung nie blockieren */}
+}
+function syncMarkAllDirty(){
+  if(!syncCfg)return;
+  const q=syncQGet(),idx=recIndex(),now=Date.now();
+  for(const k in idx){q[k]={kind:idx[k].kind,id:idx[k].id,ord:idx[k].ord,data:idx[k].data,del:false,ts:now};}
+  syncQSet(q);syncRebase();syncFlush();
+}
+async function syncFlush(){
+  if(!syncCfg||!syncClient||syncFlushing)return;
+  const q=syncQGet(),keys=Object.keys(q);
+  if(!keys.length)return;
+  syncFlushing=true;
+  try{
+    const rows=keys.map(k=>({space:SPACE,kind:q[k].kind,id:q[k].id,data:q[k].data,deleted:q[k].del,ord:q[k].ord,updated_at:q[k].ts}));
+    const {error}=await syncClient.from("sync_records").upsert(rows,{onConflict:"space,kind,id"});
+    if(!error){syncQSet({});syncErr="";updateSyncStatus();}
+  }catch(e){/* späterer Versuch: online-Event oder nächste Änderung */}
+  syncFlushing=false;
+}
+function syncApply(r){
+  if(!r||r.space!==SPACE)return;
+  const k=r.kind+":"+r.id,q=syncQGet();
+  if(q[k])return; /* lokale Änderung noch offen -> die gewinnt, geht eh hoch */
+  const lists={coach:state.coaches,child:state.children,session:state.sessions};
+  const arr=lists[r.kind];if(!arr)return;
+  const i=arr.findIndex(x=>x.id===r.id);
+  if(r.deleted){if(i>=0)arr.splice(i,1);delete syncBase[k];}
+  else{
+    const s=JSON.stringify(r.data);
+    if(syncBase[k]===s)return;
+    if(i>=0)arr[i]=r.data;else arr.push(r.data);
+    syncBase[k]=s;
+  }
+  persist();render();updateSyncStatus();
+}
+/* Verbindungs-/Merge-Logik: beim ersten Verbinden werden lokale und fremde Daten verschmolzen.
+   Frische Geräte (eigene Einheiten: 0) verwerfen dabei ihre unangetasteten Platzhalter-Namen. */
+async function syncConnect(cfg){
+  if(!window.supabase){toast("Sync-Bibliothek nicht geladen – Seite neu laden (offline?)");return;}
+  const c=supabase.createClient(cfg.url,cfg.key,{auth:{persistSession:true,autoRefreshToken:true}});
+  const {error}=await c.auth.signInWithPassword({email:cfg.email,password:cfg.pass});
+  if(error){syncErr=error.message;toast("Anmeldung fehlgeschlagen: "+error.message);renderPeople();return;}
+  const {data:rows,error:pe}=await c.from("sync_records").select("*").eq("space",SPACE);
+  if(pe){syncErr=pe.message;toast("Sync-Fehler: "+pe.message);renderPeople();return;}
+  syncCfg=cfg;localStorage.setItem(SYNC_CFG,JSON.stringify(cfg));
+  syncClient=c;syncOn=true;syncErr="";
+  const remote=rows||[],firstTime=!localStorage.getItem(SYNC_SEEN);
+  const rmap={};for(const r of remote)rmap[r.kind+":"+r.id]=r;
+  const seen=remote.length>0&&state.sessions.length===0&&firstTime; /* frisches Gerät */
+  const q=syncQGet();
+  const lists={coach:state.coaches,child:state.children,session:state.sessions};
+  for(const kind of ["coach","child","session"]){
+    const arr=lists[kind];
+    for(let i=arr.length-1;i>=0;i--){
+      const k=kind+":"+arr[i].id;
+      if(rmap[k])arr.splice(i,1); /* übernehmen wir vom Server */
+      else if(seen&&isSeedRecord(kind,arr[i]))arr.splice(i,1); /* Platzhalter des frischen Geräts weg */
+      else if(!firstTime&&!q[k])arr.splice(i,1); /* nach erstem Sync gilt der Server */
+    }
+    for(const r of remote){
+      if(r.kind!==kind||r.deleted)continue;
+      const k=kind+":"+r.id;
+      if(q[k])continue; /* offene lokale Änderung gewinnt */
+      arr.push(r.data);
+    }
+    if(kind!=="session")arr.sort((a,b)=>{const ka=remote.findIndex(r=>r.kind===kind&&r.id===a.id),kb=remote.findIndex(r=>r.kind===kind&&r.id===b.id);return (ka<0?1e9:ka)-(kb<0?1e9:kb);});
+  }
+  localStorage.setItem(SYNC_SEEN,"1");
+  window.state=state;persist();
+  syncMarkAllDirty(); /* lokale Übernahmen + neue Records hochladen */
+  c.channel("skate-sync-"+SPACE)
+    .on("postgres_changes",{event:"*",schema:"public",table:"sync_records",filter:"space=eq."+SPACE},p=>syncApply(p.new))
+    .subscribe();
+  try{await c.auth.getSession();}catch(e){}
+  ss=null;render();toast("Sync verbunden ✓");
+}
+function syncInit(){
+  if(!syncCfg)return;
+  if(!window.supabase){syncErr="Bibliothek offline";return;}
+  (async()=>{
+    try{
+      const c=supabase.createClient(syncCfg.url,syncCfg.key,{auth:{persistSession:true,autoRefreshToken:true}});
+      let {data:{session}}=await c.auth.getSession();
+      if(!session){
+        const {error}=await c.auth.signInWithPassword({email:syncCfg.email,password:syncCfg.pass});
+        if(error){syncErr=error.message;updateSyncStatus();render();return;}
+      }
+      syncClient=c;syncOn=true;syncErr="";
+      c.channel("skate-sync-"+SPACE)
+        .on("postgres_changes",{event:"*",schema:"public",table:"sync_records",filter:"space=eq."+SPACE},p=>syncApply(p.new))
+        .subscribe();
+      syncRebase();
+      const {data:rows}=await c.from("sync_records").select("*").eq("space",SPACE);
+      if(rows&&rows.length){
+        /* Änderungen abholen, die passiert sind, während das Handy zu war */
+        const have=new Set();const lists={coach:state.coaches,child:state.children,session:state.sessions};
+        for(const r of rows){
+          have.add(r.kind+":"+r.id);
+          if(!lists[r.kind].some(x=>x.id===r.id))syncApply(r);
+        }
+        const q=syncQGet();
+        for(const kind of ["coach","child","session"]){
+          const arr=lists[kind];
+          for(let i=arr.length-1;i>=0;i--){
+            const k=kind+":"+arr[i].id;
+            if(!have.has(k)&&!q[k]&&syncBase[k]!==undefined){arr.splice(i,1);delete syncBase[k];}
+          }
+        }
+        persist();render();
+      }
+      syncFlush();updateSyncStatus();
+    }catch(e){syncErr=e.message||String(e);updateSyncStatus();}
+  })();
+}
+function isSeedRecord(kind,o){
+  if(kind==="coach")return /^Trainer \d+$/.test(o.name||"")&&o.photo==null;
+  if(kind==="child")return /^Kind \d+$/.test(o.name||"")&&o.photo==null;
+  return false;
+}
+function syncStatusText(){
+  if(!syncCfg)return null;
+  const n=Object.keys(syncQGet()).length;
+  if(syncOn)return "☁️ Verbunden mit Cloud-Sync"+(n?" · "+n+" wartt…":" · alles aktuell");
+  return "⚠️ Sync getrennt"+(syncErr?" ("+esc(syncErr)+")":"")+(n?" · "+n+" warten auf Übertragung":"");
+}
+function updateSyncStatus(){
+  const el=document.getElementById("syncStatus");
+  if(el&&syncCfg)el.innerHTML='<div class="hint">'+syncStatusText()+'</div>';
+}
+function openSyncForm(){ss=Object.assign({url:"",key:"",email:"",pass:""},syncCfg||{});renderPeople();}
+function syncFormSet(f,v){if(ss)ss[f]=v;}
+async function syncFormConnect(){
+  if(!ss)return;
+  if(!ss.url.trim()||!ss.key.trim()||!ss.email.trim()||!ss.pass){toast("Bitte alle Felder ausfüllen");return;}
+  toast("Verbinde…");
+  await syncConnect({url:ss.url.trim().replace(/\/$/,""),key:ss.key.trim(),email:ss.email.trim(),pass:ss.pass});
+}
+async function syncDisconnect(){
+  if(!await confirmBox("Sync trennen?","Daten bleiben auf diesem Gerät erhalten, werden aber nicht mehr aktualisiert."))return;
+  try{if(syncClient)await syncClient.auth.signOut();}catch(e){}
+  localStorage.removeItem(SYNC_CFG);localStorage.removeItem(SYNC_Q);localStorage.removeItem(SYNC_SEEN);
+  syncCfg=null;syncClient=null;syncOn=false;ss=null;render();toast("Sync getrennt");
+}
+window.addEventListener("online",()=>{if(syncCfg){if(!syncOn)syncInit();syncFlush();}});
 
 /* ================= Helfer ================= */
 const $=s=>document.querySelector(s);
@@ -555,8 +731,23 @@ function renderPeople(){
   h+='<div class="card"><h2>Daten</h2><div class="row">'+
     '<button class="ghostbtn" onclick="exportData()">⬇ Export (JSON)</button>'+
     '<button class="ghostbtn" onclick="document.getElementById(\'importInput\').click()">⬆ Import</button>'+
-    '<input type="file" id="importInput" accept="application/json" hidden onchange="importData(this)"></div>'+
-    '<div class="hint">Alle Daten bleiben lokal auf dem Gerät (Safari). Regelmäßig Export als Backup.</div></div>';
+    '<input type="file" id="importInput" accept="application/json" hidden onchange="importData(this)"></div>';
+  if(syncCfg){
+    h+='<div id="syncStatus"><div class="hint">'+syncStatusText()+'</div></div>'+
+      '<div class="row" style="margin-top:8px"><button class="ghostbtn" onclick="syncFlush()">🔄 Jetzt synchronisieren</button>'+
+      '<button class="ghostbtn danger" onclick="syncDisconnect()">Sync trennen</button></div>';
+  }else if(ss){
+    h+='<div class="field" style="margin-top:10px"><label>Supabase-URL</label><input type="text" style="width:100%" placeholder="https://xxxx.supabase.co" value="'+esc(ss.url)+'" oninput="syncFormSet(\'url\',this.value)"></div>'+
+      '<div class="field"><label>Anon-Schlüssel</label><input type="text" style="width:100%" placeholder="eyJ…" value="'+esc(ss.key)+'" oninput="syncFormSet(\'key\',this.value)"></div>'+
+      '<div class="field"><label>Gemeinsame E-Mail</label><input type="email" style="width:100%" autocomplete="username" value="'+esc(ss.email)+'" oninput="syncFormSet(\'email\',this.value)"></div>'+
+      '<div class="field"><label>Gemeinsames Passwort</label><input type="password" style="width:100%" autocomplete="current-password" value="'+esc(ss.pass)+'" oninput="syncFormSet(\'pass\',this.value)"></div>'+
+      '<div class="row"><button class="bigbtn" style="flex:1" onclick="syncFormConnect()">Verbinden</button>'+
+      '<button class="ghostbtn" onclick="ss=null;renderPeople()">Abbrechen</button></div>'+
+      '<div class="hint">Bestehende Daten auf diesem Gerät werden mit dem Server zusammengeführt. Auf dem zweiten Gerät einfach dasselbe Konto eintragen – die Daten kommen dann automatisch.</div>';
+  }else{
+    h+='<div class="row" style="margin-top:8px"><button class="ghostbtn" onclick="openSyncForm()">☁️ Cloud-Sync einrichten</button></div>';
+  }
+  h+='<div class="hint">'+(syncCfg?"Zum Backup trotzdem gelegentlich Export nutzen.":"Alle Daten bleiben lokal auf dem Gerät. Regelmäßig Export als Backup – oder ☁️ Cloud-Sync einrichten, dann sehen alle Geräte dieselben Daten.")+'</div></div>';
   $("#app").innerHTML=h;
 }
 function setCoachRate(id,v){const c=state.coaches.find(x=>x.id===id);if(c){c.rate=Math.max(0,parseFloat(v)||0);persist();toast("Grundrate aktualisiert");}}
@@ -620,6 +811,8 @@ function importData(input){
 if(("serviceWorker" in navigator)&&(location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1")){
   navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).catch(()=>{});
 }
+syncRebase();
+syncInit();
 switchTab("day");
 window.render=render;window.switchTab=switchTab;window.openSheet=openSheet;window.saveSheet=saveSheet;
 </script>
