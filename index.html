@@ -390,7 +390,13 @@ async function syncFormConnect(){
   if(!ss)return;
   if(!ss.url.trim()||!ss.key.trim()||!ss.email.trim()||!ss.pass){toast("Bitte alle Felder ausfüllen");return;}
   toast("Verbinde…");
-  await syncConnect({url:ss.url.trim().replace(/\/$/,""),key:ss.key.trim(),email:ss.email.trim(),pass:ss.pass});
+  try{
+    await syncConnect({url:ss.url.trim().replace(/\/$/,""),key:ss.key.trim(),email:ss.email.trim(),pass:ss.pass});
+  }catch(e){
+    syncErr=(e&&e.message)||String(e);
+    toast("Sync nicht erreichbar – bitte Netzwerk prüfen");
+    updateSyncStatus();
+  }
 }
 async function syncDisconnect(){
   if(!await confirmBox("Sync trennen?","Daten bleiben auf diesem Gerät erhalten, werden aber nicht mehr aktualisiert."))return;
