@@ -353,7 +353,12 @@ function syncInit(){
         const have=new Set();const lists={coach:state.coaches,child:state.children,session:state.sessions};
         for(const r of rows){
           have.add(r.kind+":"+r.id);
-          if(!lists[r.kind].some(x=>x.id===r.id))syncApply(r);
+          /* Immer anwenden, auch bei lokal bereits vorhandener id:
+             sonst gehen Aktualisierungen bestehender Records (z. B. Umbenennungen
+             von Kindern/Trainern) verloren, wenn das Gerät beim Ändern zu war,
+             weil der Realtime-Kanal im Hintergrund abstürzt. Offene lokale
+             Änderungen (Queue q) gewinnen in syncApply trotzdem. */
+          syncApply(r);
         }
         const q=syncQGet();
         for(const kind of ["coach","child","session"]){
