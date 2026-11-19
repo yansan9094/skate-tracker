@@ -23,7 +23,9 @@ Eine kleine Web-App im iOS-Look, die sich wie eine native App anfühlt
   Tages-/Monats-/Gesamtkosten nach Formel
   `Stundensatz/60 · Trainingsminuten ÷ Anzahl Kinder der Gruppe`,
   plus Statistiken (Anzahl Eis-/Off-Ice-Einheiten, Eiszeit, Off-Ice-Zeit,
-  6-Monats-Balkendiagramm).
+  6-Monats-Balkendiagramm). Patch-Kosten werden überall separat ausgewiesen
+  (eigene Kacheln pro Monat/Gesamt, grüner Patch-Anteil im Balkendiagramm,
+  Patch-Betrag pro Monat in der Monatsübersicht).
 - **Personen**: Trainer und Kinder hinzufügen/umbenennen/löschen; Grund-
   Stundensatz je Trainer; Foto je Person (Avatar, wird automatisch komprimiert).
   Gelöschte Personen bleiben in der Kostenhistorie erhalten.
@@ -41,7 +43,11 @@ nachgeliefert, Konfliktregel: pro Datensatz gewinnt die letzte Änderung).
 1. Konto auf https://supabase.com anlegen, Projekt in Region **Frankfurt (eu-central-1)** erstellen.
 2. Im Dashboard unter **SQL Editor** den Inhalt von `supabase-setup.sql` ausführen.
 3. Unter **Authentication → Users → Add user** ein gemeinsames Familienkonto
-   anlegen (E-Mail + Passwort, „Mark email as confirmed“ anhaken).
+   anlegen (E-Mail + Passwort). **Wichtig:** Das Häkchen **„Create user without
+   email confirmation“** setzen – ohne dieses Häkchen ist das Konto
+   unbestätigt und die App meldet beim Verbinden „Anmeldung fehlgeschlagen:
+   Email not confirmed“. (Falls schon passiert: unten unter *Problembehandlung*
+   steht ein SQL-Fix.)
 4. Unter **Project Settings → API** die Projekt-URL und den anon-Schlüssel
    ablesen.
 5. Auf **jedem** Handy in der App unter Personen → Daten → Cloud-Sync
@@ -51,6 +57,22 @@ nachgeliefert, Konfliktregel: pro Datensatz gewinnt die letzte Änderung).
 Hinweise: Der anon-Schlüssel ist öffentlich gedacht; geschützt ist alles durch
 das Familienkonto (RLS). Die Sync-Zugangsdaten liegen im localStorage des
 Geräts. Fotos wandern als Teil der Datensätze mit durch die Cloud.
+
+### Problembehandlung „Anmeldung fehlgeschlagen“
+Die Meldung endet immer mit dem eigentlichen Grund:
+
+- **„Email not confirmed“** – das Konto wurde ohne Bestätigungs-Häkchen
+  angelegt. Fix im Dashboard unter **SQL Editor**:
+  `update auth.users set email_confirmed_at = now();`
+  (Danach in der App erneut „Verbinden“ tippen.)
+- **„Invalid login credentials“** – E-Mail oder Passwort vertippt
+  (Groß-/Kleinschreibung beachten). Kontrolle: Dashboard → Authentication →
+  Users; notfalls Konto löschen und neu anlegen.
+- **„Invalid API key“** – falscher anon-Schlüssel kopiert (Project Settings →
+  API → `anon` / „Publishable key“, nicht der `service_role`).
+- **„Failed to fetch“ / Netzwerkfehler** – URL vertippt (muss mit
+  `https://` und `.supabase.co` enden) oder das Supabase-Projekt ist im
+  Gratis-Konto pausiert (Dashboard → Projekt starten).
 
 ## Auf dem iPhone installieren
 1. In **Safari** (nicht Chrome!) öffnen: **https://yansan9094.github.io/skate-tracker/**
