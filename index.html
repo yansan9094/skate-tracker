@@ -152,8 +152,11 @@ input[type=text]{background:rgba(255,255,255,.07);border:1px solid var(--card-b)
 /* month bars */
 .bars{display:flex;align-items:flex-end;gap:8px;height:110px;padding:6px 2px 0}
 .bars .b{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;height:100%;justify-content:flex-end}
-.bars .bar{width:100%;border-radius:7px 7px 3px 3px;background:var(--grad);min-height:3px}
+.bars .bar{width:100%;border-radius:7px 7px 3px 3px;background:var(--grad);min-height:3px;display:flex;flex-direction:column;justify-content:flex-end;overflow:hidden}
+.bars .bar-patch{width:100%;background:var(--green);min-height:2px}
 .bars .bl{font-size:10px;color:var(--tx3);font-weight:600}
+.bars-legend{display:flex;gap:14px;margin-top:8px;font-size:11.5px;color:var(--tx2)}
+.bars-legend .sw{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
 .mrow{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.06);font-size:14.5px}
 .mrow:last-child{border-bottom:none}
 .mrow .mname{font-weight:700;min-width:120px}
@@ -464,15 +467,15 @@ function suggestedRate(coachId,dateISO){
 function childStats(cid){
   const list=state.sessions.filter(s=>(s.childIds||[]).includes(cid));
   const byMonth={};
-  let ice=0,off=0,patch=0,iceMin=0,offMin=0,patchMin=0,total=0;
+  let ice=0,off=0,patch=0,iceMin=0,offMin=0,patchMin=0,total=0,iceCost=0,offCost=0,patchCost=0;
   for(const s of list){
-    const k=monthKey(s.date); const m=byMonth[k]||(byMonth[k]={cost:0,ice:0,off:0,patch:0,iceMin:0,offMin:0,patchMin:0});
+    const k=monthKey(s.date); const m=byMonth[k]||(byMonth[k]={cost:0,ice:0,off:0,patch:0,iceMin:0,offMin:0,patchMin:0,iceCost:0,offCost:0,patchCost:0});
     const c=costPerChild(s); m.cost+=c; total+=c;
-    if(s.type==="ice"){m.ice++;ice++;m.iceMin+=s.minutes;iceMin+=s.minutes;}
-    else if(s.type==="patch"){m.patch++;patch++;m.patchMin+=s.minutes;patchMin+=s.minutes;}
-    else{m.off++;off++;m.offMin+=s.minutes;offMin+=s.minutes;}
+    if(s.type==="ice"){m.ice++;ice++;m.iceMin+=s.minutes;iceMin+=s.minutes;m.iceCost+=c;iceCost+=c;}
+    else if(s.type==="patch"){m.patch++;patch++;m.patchMin+=s.minutes;patchMin+=s.minutes;m.patchCost+=c;patchCost+=c;}
+    else{m.off++;off++;m.offMin+=s.minutes;offMin+=s.minutes;m.offCost+=c;offCost+=c;}
   }
-  return {list,byMonth,ice,off,patch,iceMin,offMin,patchMin,total};
+  return {list,byMonth,ice,off,patch,iceMin,offMin,patchMin,total,iceCost,offCost,patchCost};
 }
 
 /* ================= Navigation ================= */
@@ -684,13 +687,15 @@ function renderCost(){
   const kid=kids.find(k=>k.id===costChildId);
   const st=childStats(costChildId);
   const nowKey=monthKey(todayISO());
-  const cur=st.byMonth[nowKey]||{cost:0,ice:0,off:0,patch:0,iceMin:0,offMin:0,patchMin:0};
+  const cur=st.byMonth[nowKey]||{cost:0,ice:0,off:0,patch:0,iceMin:0,offMin:0,patchMin:0,iceCost:0,offCost:0,patchCost:0};
   let h='<div class="top"><h1>Kosten &amp; Statistik</h1><div class="sub">'+esc(kid.name)+"</div></div>";
   h+='<div class="chiprow" style="margin:6px 0 2px">';
   for(const k of kids)h+='<button class="chip '+(k.id===costChildId?"on":"")+'" onclick="costChildId=&quot;'+k.id+'&quot;;render()">'+avatar(k,"sm")+esc(k.name)+"</button>";
   h+="</div>";
   h+='<div class="card"><h2>'+esc(monthLabel(nowKey))+' (aktuell)</h2><div class="tiles" style="margin:0">'+
     '<div class="tile hl"><div class="v num">'+fmtEUR(cur.cost)+'</div><div class="k">Kosten Monat</div></div>'+
+    '<div class="tile"><div class="v num">'+fmtEUR(cur.iceCost+cur.offCost)+'</div><div class="k">❄ Eis + 🏋️ Off-Ice</div></div>'+
+    '<div class="tile"><div class="v num" style="color:var(--green)">'+fmtEUR(cur.patchCost)+'</div><div class="k">🧩 Patch</div></div>'+
     '<div class="tile"><div class="v num">'+(cur.ice+cur.off+cur.patch)+'</div><div class="k">Einheiten</div></div>'+
     '<div class="tile"><div class="v num">'+cur.ice+" / "+cur.off+" / "+cur.patch+'</div><div class="k">Eis / Off-Ice / Patch</div></div>'+
     '<div class="tile"><div class="v num">'+fmtMin(cur.iceMin)+'</div><div class="k">Eiszeit</div></div>'+
@@ -699,12 +704,15 @@ function renderCost(){
   /* Balkendiagramm letzte 6 Monate */
   const months=[];const base=fromISO(nowKey+"-01");
   for(let i=5;i>=0;i--){const d=new Date(base.getFullYear(),base.getMonth()-i,1);months.push(isoOf(d).slice(0,7));}
-  const vals=months.map(k=>(st.byMonth[k]||{cost:0}).cost);const mx=Math.max(...vals,1);
+  const vals=months.map(k=>st.byMonth[k]||{cost:0,patchCost:0});const mx=Math.max(...vals.map(v=>v.cost),1);
   h+='<div class="card"><h2>Kosten letzte 6 Monate</h2><div class="bars">'+
-    months.map((k,i)=>'<div class="b"><div class="bar" style="height:'+Math.max(2,Math.round(vals[i]/mx*88))+'%"></div><div class="bl">'+monthLabel(k).split(" ")[0].slice(0,3)+"</div></div>").join("")+
-    "</div></div>";
+    months.map((k,i)=>{const v=vals[i];const bH=Math.max(2,Math.round(v.cost/mx*88));const pS=v.cost>0?Math.min(100,Math.round(v.patchCost/v.cost*100)):0;
+      return '<div class="b"><div class="bar" style="height:'+bH+'%">'+(pS>0?'<div class="bar-patch" style="height:'+pS+'%"></div>':"")+'</div><div class="bl">'+monthLabel(k).split(" ")[0].slice(0,3)+"</div></div>";}).join("")+
+    '</div><div class="bars-legend"><span><span class="sw" style="background:var(--grad)"></span>Eis + Off-Ice</span><span><span class="sw" style="background:var(--green)"></span>Patch-Anteil</span></div></div>';
   h+='<div class="card"><h2>Gesamt (alle Monate)</h2><div class="tiles" style="margin:0">'+
     '<div class="tile"><div class="v num">'+fmtEUR(st.total)+'</div><div class="k">Kosten gesamt</div></div>'+
+    '<div class="tile"><div class="v num">'+fmtEUR(st.iceCost+st.offCost)+'</div><div class="k">❄ Eis + 🏋️ Off-Ice gesamt</div></div>'+
+    '<div class="tile"><div class="v num" style="color:var(--green)">'+fmtEUR(st.patchCost)+'</div><div class="k">🧩 Patch gesamt</div></div>'+
     '<div class="tile"><div class="v num">'+(st.ice+st.off+st.patch)+'</div><div class="k">Einheiten gesamt</div></div>'+
     '<div class="tile"><div class="v num">'+st.ice+" / "+st.off+" / "+st.patch+'</div><div class="k">Eis / Off-Ice / Patch</div></div>'+
     '<div class="tile"><div class="v num">'+fmtMin(st.iceMin)+'</div><div class="k">Eiszeit gesamt</div></div>'+
@@ -714,7 +722,7 @@ function renderCost(){
   h+='<div class="card"><h2>Monatsübersicht</h2>';
   if(!keys.length)h+='<div class="empty">Noch keine Trainingsdaten.</div>';
   for(const k of keys){const m=st.byMonth[k];
-    h+='<div class="mrow"><span class="mname">'+esc(monthLabel(k))+'</span><span class="muted small">'+m.ice+"×❄ "+m.off+"×🏋️ "+m.patch+"×🧩</span><span class=\"mc\">"+fmtEUR(m.cost)+"</span></div>";}
+    h+='<div class="mrow"><span class="mname">'+esc(monthLabel(k))+'</span><span class="muted small">'+m.ice+"×❄ "+m.off+"×🏋️ "+m.patch+"×🧩</span>"+(m.patchCost>0?'<span class="muted small" style="color:var(--green)">🧩 '+fmtEUR(m.patchCost)+"</span>":"")+'<span class="mc">'+fmtEUR(m.cost)+"</span></div>";}
   h+="</div>";
   $("#app").innerHTML=h;
 }
